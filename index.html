@@ -1,0 +1,133 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SpendSense</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.min.js"></script>
+<style>
+:root{--bg:#F8FAFC;--card:#fff;--tx:#111827;--mu:#64748B;--ac:#635BFF;--ok:#059669;--wa:#D97706;--cr:#DC2626;--bd:#E5E7EB}
+*{box-sizing:border-box}body{margin:0;font:14px Inter,system-ui,sans-serif;background:var(--bg);color:var(--tx);display:flex;min-height:100vh}
+nav{width:216px;background:#fff;border-right:1px solid var(--bd);padding:16px 10px;flex-shrink:0}
+nav b{display:block;padding:4px 10px 16px;font-size:17px}nav b span{color:var(--ac)}
+nav a{display:block;padding:8px 10px;border-radius:6px;color:var(--mu);cursor:pointer;margin-bottom:2px}nav a:hover{background:var(--bg)}nav a.on{background:#EEF0FF;color:var(--ac);font-weight:600}
+main{flex:1;padding:24px 32px;max-width:1200px;min-width:0}h1{font-size:26px;margin:0 0 4px}.sub{color:var(--mu);margin:0 0 20px}
+.top{display:flex;justify-content:space-between;align-items:center;margin-bottom:6px;gap:8px}.pill{font-size:12px;background:#EEF0FF;color:var(--ac);padding:3px 10px;border-radius:99px}
+.grid{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));margin-bottom:16px}
+.card{background:var(--card);border:1px solid var(--bd);border-radius:8px;padding:16px;margin-bottom:14px}.grid .card{margin:0}
+.k{color:var(--mu);font-size:12px}.v{font-size:24px;font-weight:600;margin-top:4px}.ch{font-size:12px;color:var(--mu)}
+table{width:100%;border-collapse:collapse}th{text-align:left;color:var(--mu);font-weight:500;font-size:12px;padding:8px;border-bottom:1px solid var(--bd)}td{padding:8px;border-bottom:1px solid var(--bd)}
+tr.c{cursor:pointer}tr.c:hover{background:var(--bg)}.neg{color:var(--tx)}.pos{color:var(--ok)}.wa{color:var(--wa)}.cr{color:var(--cr)}
+input,select,button,textarea{font:inherit;padding:7px 10px;border:1px solid var(--bd);border-radius:6px;background:#fff}button{cursor:pointer}button.p{background:var(--ac);color:#fff;border-color:var(--ac)}
+.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px;align-items:center}.two{display:grid;grid-template-columns:2fr 1fr;gap:14px}
+.ins{border-left:3px solid var(--ac)}.ic{display:grid;grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:24px;align-items:center}.ic p{margin:6px 0 8px}.ic figure{margin:0}.ic figcaption{margin-bottom:6px}.cw{position:relative;height:150px}.how{max-width:820px}.how h3{margin:0 0 2px;font-size:16px}.how ul{margin:10px 0 0;padding-left:20px;line-height:1.65}.how li{margin-bottom:6px}.toast{position:fixed;bottom:20px;right:20px;background:#111827;color:#fff;padding:10px 16px;border-radius:6px}
+.sk{height:80px;background:linear-gradient(90deg,#eee,#f6f6f6,#eee);border-radius:8px}pre{white-space:pre-wrap;font-size:12px;color:var(--mu)}
+@media(max-width:800px){body{flex-direction:column}nav{width:100%;display:flex;overflow-x:auto;padding:8px}nav b{padding:8px}nav a{white-space:nowrap}#nav{display:flex}main{padding:16px}.two,.ic{grid-template-columns:1fr}}
+</style></head><body>
+<nav><b>Spend<span>Sense</span></b><div id="nav"></div></nav><main><div class="top"><div></div><div><span class="pill">Demo account · synthetic data</span> <span id=who></span></div></div><div id="pg"></div></main><div id="t" class="toast" hidden></div>
+<script>
+const api=(u,o)=>fetch('/api'+u,o).then(async r=>{const j=await r.json();if(!r.ok)throw new Error(j.detail||'Request failed');return j});
+const $=n=>'$'+Number(n).toLocaleString(undefined,{minimumFractionDigits:2,maximumFractionDigits:2}),pc=n=>n==null?'–':(n>0?'+':'')+n+'%';
+const toast=m=>{t.textContent=m;t.hidden=false;setTimeout(()=>t.hidden=true,2800)};let charts=[],months=6,txCat='',sv=[];
+const mk=(id,cfg)=>{charts.push(new Chart(document.getElementById(id),cfg))};
+Chart.defaults.font.family='Inter,system-ui,sans-serif';Chart.defaults.color='#64748B';
+const mini=(id,c)=>{const hb=c.type=='hbar',ln=c.type=='line',hi=i=>c.highlight==null||i==c.highlight;
+ mk(id,{type:ln?'line':'bar',data:{labels:c.labels,datasets:[{data:c.values,backgroundColor:ln?'#635BFF':c.values.map((_,i)=>hi(i)?'#635BFF':'#B9B5FC'),borderColor:'#635BFF',borderWidth:ln?2:0,stepped:c.stepped,borderRadius:4,borderSkipped:'start',maxBarThickness:28,pointRadius:c.values.map((_,i)=>ln&&i===c.highlight?5:0),pointHoverRadius:5,pointBackgroundColor:'#635BFF'}]},
+ options:{indexAxis:hb?'y':'x',maintainAspectRatio:false,animation:false,interaction:{mode:'index',intersect:false},plugins:{legend:{display:false},tooltip:{callbacks:{label:x=>$(x.raw)}}},
+  scales:{[hb?'y':'x']:{grid:{display:false},ticks:{autoSkip:true,maxRotation:0}},[hb?'x':'y']:{beginAtZero:true,grid:{color:'#F1F5F9'},border:{display:false},ticks:{maxTicksLimit:4,callback:v=>'$'+Number(v).toLocaleString()}}}}})};
+const fig=(id,c)=>c?`<figure><figcaption class=ch>${c.caption}</figcaption><div class=cw><canvas id=${id} role=img aria-label="${c.caption}"></canvas></div></figure>`:'';
+const insCard=(i,id)=>`<div class="card ins ic"><div><b>${i.title}</b><p>${i.body}</p><div class=ch>Evidence: ${i.confidence} · Action: ${i.action} · <a href="#" onclick="go('${i.link.split(':')[0]}','${i.link.split(':')[1]||''}');return false">Details</a></div></div>${fig(id,i.chart)}</div>`;
+const drawIns=(xs,p)=>xs.forEach((i,k)=>i.chart&&mini(p+k,i.chart));
+const P={
+async overview(){const[o,u]=await Promise.all([api('/analytics/overview?months='+months),api('/demo/status')]),hr=new Date().getHours();
+ return [`<h1>Good ${hr<12?'morning':hr<18?'afternoon':'evening'}, ${u.user.split(' ')[0]}</h1><p class=sub>Here's what's happening with your money. Data through ${o.as_of}.</p>
+ <div class=row><select onchange="months=+this.value;go('overview')">${[3,6,12,22].map(m=>`<option value=${m} ${m==months?'selected':''}>Last ${m} months</option>`).join('')}</select></div>
+ <div class=grid><div class=card><div class=k>Total spending</div><div class=v>${$(o.spending)}</div><div class=ch>${pc(o.spending_change_pct)} vs previous period</div></div>
+ <div class=card><div class=k>Income</div><div class=v>${$(o.income)}</div><div class=ch>${pc(o.income_change_pct)} vs previous period</div></div>
+ <div class=card><div class=k>Net cash flow</div><div class="v ${o.net<0?'cr':'pos'}">${$(o.net)}</div></div>
+ <div class=card><div class=k>Potential annual savings</div><div class=v>${$(o.potential_annual_savings)}</div><div class=ch>Estimates, not guaranteed</div></div></div>
+ <div class=two><div class=card><canvas id=c1 height=140></canvas></div><div class=card><canvas id=c2></canvas><div class=ch>Click a slice to filter transactions</div></div></div>
+ <h3>Insights worth your attention</h3>${o.insights.map((i,k)=>insCard(i,'i'+k)).join('')}`,
+ ()=>{drawIns(o.insights,'i');mk('c1',{type:'bar',data:{labels:o.trends.map(t=>t.month),datasets:[{label:'Income',data:o.trends.map(t=>t.income),backgroundColor:'#059669'},{label:'Expenses',data:o.trends.map(t=>t.expenses),backgroundColor:'#635BFF'},{type:'line',label:'Net',data:o.trends.map(t=>t.net),borderColor:'#D97706'}]}});
+ mk('c2',{type:'doughnut',data:{labels:o.category_breakdown.map(c=>c.category),datasets:[{data:o.category_breakdown.map(c=>c.amount),backgroundColor:['#635BFF','#059669','#D97706','#DC2626','#0EA5E9','#64748B','#A78BFA','#14B8A6','#F59E0B','#94A3B8','#334155','#E879F9']}]},options:{plugins:{tooltip:{callbacks:{label:c=>c.label+': '+$(c.raw)+' ('+o.category_breakdown[c.dataIndex].pct+'%)'}}},onClick:(e,a)=>a[0]&&go('transactions',o.category_breakdown[a[0].index].category)}})}]},
+async transactions(cat){if(cat!==undefined)txCat=cat;const q=document.getElementById('q')?.value||'';const cats=await api('/transactions/categories');
+ const r=await api(`/transactions?size=40&category=${encodeURIComponent(txCat)}&q=${encodeURIComponent(q)}`);
+ return `<h1>Transactions</h1><p class=sub>${r.total} matching. Change a category to teach SpendSense (saved per merchant).</p>
+ <div class=row><input id=q placeholder="Search merchant…" value="${q}" onkeydown="event.key=='Enter'&&go('transactions')"><select onchange="txCat=this.value;go('transactions')"><option value="">All categories</option>${cats.map(c=>`<option ${c==txCat?'selected':''}>${c}</option>`).join('')}</select>
+ <label class=btn><input type=file id=f accept=.csv onchange="up(this)"></label></div><div id=us></div>
+ <div class=card style="overflow-x:auto"><table><tr><th>Merchant<th>Date<th>Category<th>Account<th>Amount<th>Status</tr>${r.items.map(x=>`<tr><td>${x.merchant}<td>${x.transaction_date}<td><select onchange="setCat(${x.id},this.value)">${cats.map(c=>`<option ${c==x.category?'selected':''}>${c}</option>`).join('')}</select> <span class=ch>${Math.round(x.category_confidence*100)}%</span><td>${x.account}<td class="${x.amount>0?'pos':''}">${$(x.amount)}<td class="${x.needs_review?'wa':''}">${x.status}</tr>`).join('')}</table></div>`},
+async subscriptions(){const s=await api('/subscriptions');
+ return `<h1>Subscriptions</h1><p class=sub>Detected from payment cadence and amount consistency.</p><div class=grid><div class=card><div class=k>Monthly recurring</div><div class=v>${$(s.monthly_cost)}</div></div><div class=card><div class=k>Annualized</div><div class=v>${$(s.annual_cost)}</div></div><div class=card><div class=k>Active</div><div class=v>${s.active}</div></div><div class=card><div class=k>Renewing in 7 days</div><div class=v>${s.upcoming_7d.length}</div></div></div>
+ ${s.overlaps.map(o=>`<div class="card ins">Possibly overlapping services: <b>${o.join(', ')}</b>. These are different charges, but may serve a similar purpose.</div>`).join('')}
+ <div class=card style="overflow-x:auto"><table><tr><th>Merchant<th>Monthly eq.<th>Frequency<th>Next expected<th>Price change<th>Confidence<th>My decision</tr>${s.items.map(x=>`<tr><td>${x.merchant}${x.kind=='bill'?' <span class=ch>(bill)</span>':''}<td>${$(x.monthly_equivalent)}<td>${x.billing_frequency}<td>${x.next_expected_payment}<td class=wa>${x.price_change?`${$(x.price_change.from)} → ${$(x.price_change.to)}`:'–'}<td>${Math.round(x.confidence*100)}%<td><select onchange="sub(${x.id},this.value)">${['Keep','Review','Cancelled'].map(v=>`<option ${v==x.status?'selected':''}>${v}</option>`).join('')}</select></tr>`).join('')}</table><p class=ch>Status tracks your decision only; nothing is cancelled at the merchant.</p></div>`},
+async anomalies(){const[ins,a]=await Promise.all([api('/analytics/insights'),api('/anomalies')]);
+ return [`<h1>Spending Insights</h1><p class=sub>Patterns found in your transactions, each with the data behind it.</p>${ins.map((i,k)=>insCard(i,'i'+k)).join('')}
+ <h3>Unusual transactions</h3><p class=sub>Unusual is not the same as fraud. Flags use a median/MAD baseline per category.</p>${a.length?a.map((x,k)=>`<div class="card ins ic"><div><b>${x.merchant} · ${$(x.amount)}</b> <div class=ch>${x.transaction_date} · score ${x.anomaly_score} · ${x.detection_method}</div><p>${x.explanation}</p><select aria-label="Feedback" onchange="an(${x.id},this.value)">${['Needs Review','Expected','Unexpected'].map(v=>`<option ${v==x.user_feedback?'selected':''}>${v}</option>`).join('')}</select></div>${fig('a'+k,x.chart)}</div>`).join(''):'<div class=card>No unusual transactions detected.</div>'}`,
+ ()=>{drawIns(ins,'i');a.forEach((x,k)=>mini('a'+k,x.chart))}]},
+async forecasts(){const r=await api('/forecasts'),f=r.forecast;
+ return [`<h1>Forecasts</h1><p class=sub>Next month (${f.period}): recurring schedule + weighted average of variable spending.</p><div class=grid><div class=card><div class=k>Predicted spending</div><div class=v>${$(f.predicted)}</div><div class=ch>80% range ${$(f.lower)} – ${$(f.upper)}</div></div><div class=card><div class=k>Expected recurring bills</div><div class=v>${$(f.recurring)}</div></div><div class=card><div class=k>Discretionary estimate</div><div class=v>${$(f.discretionary)}</div></div><div class=card><div class=k>Projected net cash flow</div><div class=v>${$(f.net)}</div><div class=ch>Income est. ${$(f.income)} (irregular)</div></div></div>
+ <div class=card><canvas id=c1 height=110></canvas></div><div class=card><b>Upcoming expenses</b><table>${f.upcoming.map(u=>`<tr><td>${u.date}<td>${u.merchant}<td>${$(u.amount)}</tr>`).join('')}</table></div><p class=ch>Backtest on last 6 months: MAE ${$(f.mae)} vs naive last-month ${$(f.naive_mae)}.</p>`,
+ ()=>{const h=r.history.map(x=>x.expenses);mk('c1',{type:'line',data:{labels:[...r.history.map(x=>x.month),f.period],datasets:[{label:'Actual',data:h,borderColor:'#635BFF'},{label:'Forecast',data:[...h.map(()=>null).slice(0,-1),h.at(-1),f.predicted],borderColor:'#D97706',borderDash:[5,4]},{label:'Upper',data:[...h.map(()=>null),f.upper],pointRadius:4,borderColor:'#94A3B8'},{label:'Lower',data:[...h.map(()=>null),f.lower],pointRadius:4,borderColor:'#94A3B8'}]}})}]},
+async recs(){const r=await api('/recommendations');
+ return [`<h1>Savings Opportunities</h1><p class=sub>${r.note}</p><div class=grid><div class=card><div class=k>Potential annual savings</div><div class=v>${$(r.potential_annual)}</div></div><div class=card><div class=k>Opportunities</div><div class=v>${r.opportunities}</div></div><div class=card><div class=k>Reviewed</div><div class=v>${r.reviewed}</div></div><div class=card><div class=k>Accepted (tracked, not realized)</div><div class=v>${$(r.accepted_annual)}</div></div></div>
+ ${(sv=r.items.filter(x=>x.counted&&x.status!='Dismissed')).length?`<div class=card><b>Estimated annual savings by opportunity</b><div class=ch style="margin-bottom:8px">Dismissed items are excluded. Estimates, not guaranteed.</div><div class=cw style="height:${50+sv.length*40}px"><canvas id=sv role=img aria-label="Annual savings by opportunity"></canvas></div></div>`:''}
+ ${r.items.map(x=>`<div class="card ins"><b>${x.title}</b><p>${x.description}</p><div class=ch>Monthly ${$(x.monthly_savings_estimate)} · Annual ${$(x.annual_savings_estimate)} · confidence ${Math.round(x.confidence*100)}%${x.counted?'':' · not counted in totals'}<br>Action: ${x.action}</div><select onchange="rec(${x.id},this.value)">${['New','Reviewing','Accepted','Dismissed'].map(v=>`<option ${v==x.status?'selected':''}>${v}</option>`).join('')}</select></div>`).join('')}`,
+ ()=>sv.length&&mini('sv',{type:'hbar',labels:sv.map(x=>x.title.length>34?x.title.slice(0,33)+'…':x.title),values:sv.map(x=>x.annual_savings_estimate),highlight:null})]},
+async assistant(){return `<h1>Ask SpendSense</h1><p class=sub>Understand your finances, one question at a time.</p><div class=card><div class=row><input id=aq style="flex:1" placeholder="Which subscriptions cost me the most?" onkeydown="event.key=='Enter'&&ask()"><button class=p onclick="ask()">Ask</button></div><div class=ch>${['Which subscriptions cost me the most?','What unusual transactions occurred recently?','What expenses should I expect next month?','Where could I save money?','How much did I spend on restaurants?'].map(q=>`<a href="#" onclick="aq.value='${q}';ask();return false">${q}</a>`).join(' · ')}</div><div id=ans></div></div>`},
+async how(){const m=await api('/demo/status'),sec=(t,q,xs)=>`<div class="card how"><h3>${t}</h3><p class=ch>${q}</p><ul>${xs.map(x=>`<li>${x}</li>`).join('')}</ul></div>`,
+ worse=m.forecast_mae_6_holdout_months>m.naive_last_month_mae;
+ return `<h1>How SpendSense Works</h1><p class=sub>A plain-English tour of what happens behind each page. Everything here uses made-up (synthetic) data. No real bank accounts are connected.</p>
+ ${sec('The big picture','How the pieces fit together.',[
+  '<b>The web page</b> you are looking at runs in your browser. It does not calculate anything itself. It asks the server for results and draws them.',
+  '<b>The server</b> is a Python program (built with FastAPI). It receives requests like "give me this month\'s spending" and sends back the answers.',
+  '<b>The database</b> is a file that stores every transaction, plus your choices, such as marking a subscription "Review". That is why your changes are still there after you refresh.',
+  '<b>The analysis engine</b> is the part of the server that finds patterns: sorting purchases into categories, spotting subscriptions, flagging unusual charges, and predicting next month.',
+  '<b>The AI assistant is optional.</b> If it is turned on, it only rewords results the server already calculated. It never makes up numbers.'])}
+ ${sec('Sorting transactions into categories','How SpendSense decides that a purchase is "Groceries" or "Restaurants".',[
+  '<b>Step 1: Known stores.</b> SpendSense has a list of familiar merchants. For example, Trader Joe\'s is Groceries and Uber is Transportation. A match is labeled with 98% confidence.',
+  '<b>Step 2: Educated guess.</b> For a name it has never seen, like "Ember &amp; Oak Steakhouse", a small machine-learning model looks at the words. It has learned that words like "steakhouse" or "cafe" usually mean Restaurants.',
+  '<b>Confidence score.</b> Every guess comes with a percentage showing how sure the model is. If it is less than 40% sure, the transaction is labeled "Other" and marked <b>Review</b> so you can check it.',
+  '<b>Step 3: Learning from you.</b> When you change a category on the Transactions page, SpendSense remembers it. Future purchases from that same merchant automatically get your category.'])}
+ ${sec('Finding subscriptions','How it tells a Netflix subscription apart from regular grocery trips.',[
+  'It groups payments by merchant, after cleaning up messy names (so "NETFLIX.COM" and "Netflix" count as the same store).',
+  'It measures the number of days between payments. About 7 days apart means <b>weekly</b>, about 30 means <b>monthly</b>, about 90 means <b>quarterly</b>, and about 365 means <b>yearly</b>.',
+  'The timing must be <b>consistent</b>. Every gap has to land within 4 days (or 20%, whichever is larger) of the usual gap. Grocery trips happen often but at random times, so they do not count.',
+  'It needs at least 3 payments before calling something a subscription (2 for yearly ones), so a one-time repeat purchase is not mistaken for one.',
+  '<b>Price increases:</b> if the amount changes by more than 3% and then stays there, SpendSense reports it. Netflix going from $15.99 to $22.99 is $7 more per month, or $84 more per year.',
+  'Bills like rent and utilities are detected the same way but shown separately from subscriptions.'])}
+ ${sec('Spotting unusual spending','How it decides a charge is out of the ordinary.',[
+  'For each category, it finds your <b>typical</b> purchase, the middle value of all your past purchases (called the median). Your typical restaurant visit is about $49.',
+  'It also measures how much your purchases normally <b>vary</b>, so a category where prices naturally jump around is not flagged constantly.',
+  'A charge is flagged only if it is <b>at least 3 times your typical amount</b> and also far outside your normal range. The $480 steakhouse bill is about 10 times a typical visit.',
+  'It needs at least 10 past purchases in a category before it judges anything. With less history it cannot know what "normal" looks like.',
+  'Rent, income and subscriptions are skipped because they are expected and regular.',
+  '<b>Unusual does not mean fraud.</b> A birthday dinner can be completely normal for you. That is why you can mark each one as Expected or Unexpected.'])}
+ ${sec('Predicting next month','How the forecast is built, and why it shows a range.',[
+  '<b>Scheduled bills:</b> rent, utilities and subscriptions are added on the dates they usually arrive, using the payment patterns found above.',
+  '<b>Everyday spending</b> (food, shopping, gas) is estimated from the last 3 months, with recent months counting more: 50% for last month, 30% for the month before, and 20% for the one before that.',
+  '<b>A range, not one exact number.</b> Nobody can predict spending exactly. SpendSense tested its method on past months and used how far off it was to set a range. The actual total should land inside it about 80% of the time.',
+  'Income is estimated as the average of the last 6 months, because side income (like freelance work) arrives at irregular times.'])}
+ ${sec('Savings suggestions','How the dollar amounts on the Savings page are calculated.',[
+  '<b>Overlapping services:</b> if you pay for two similar streaming services, the savings estimate assumes you cancel only the <b>cheaper</b> one, not both.',
+  '<b>Price increases:</b> the savings equal the extra amount you now pay per year.',
+  '<b>Rising restaurant spending:</b> if the last 3 months are more than 10% higher than the 3 months before, it shows what you would save by cutting back 15%.',
+  '<b>No double counting:</b> one service is never counted in two suggestions, so the total is not inflated.',
+  'All amounts are <b>estimates</b>. Clicking "Accepted" records your plan to act. It does not mean money has actually been saved, and nothing is cancelled for you.'])}
+ ${sec('The assistant','Why it cannot make up numbers.',[
+  'Your question is matched to one of six fixed calculations, such as "spending by category" or "upcoming expenses".',
+  'The server runs that calculation and gets real results from the database.',
+  'Only then (if an AI key is set up) are those results given to Claude to explain in plain words. Without a key, the answer is clearly labeled "demo" and shows the calculation results directly.'])}
+ <div class="card how"><h3>Measured results</h3><p class=ch>These numbers come from this running copy of the app, not from a brochure.</p><ul>
+  <li><b>${m.transactions.toLocaleString()} transactions</b> are stored for ${m.user}.</li>
+  <li><b>Category accuracy: ${Math.round(m.categorizer_heldout_accuracy*100)}%</b> on practice examples the model had not seen before. Be cautious with this number: the practice examples are made up and fairly easy, so accuracy on real bank data would likely be lower.</li>
+  <li><b>Forecast accuracy:</b> tested on the last 6 months, the forecast missed the real total by <b>${$(m.forecast_mae_6_holdout_months)}</b> on average. A simple guess of "same as last month" missed by ${$(m.naive_last_month_mae)}. ${worse?'So right now the simple guess is slightly more accurate. That is an honest result, and a sign the forecast method needs improvement.':'So the forecast beats the simple guess.'}</li>
+  ${m.seed_seconds!=null?`<li><b>Loading the demo data</b> (${m.seed_records.toLocaleString()} transactions, including categorizing and analyzing them) took ${m.seed_seconds} seconds. ${m.seed_duplicates_skipped} duplicate was caught and skipped.</li>`:''}
+  ${m.last_upload_seconds!=null?`<li><b>Your last CSV upload</b> was processed in ${m.last_upload_seconds} seconds.</li>`:''}
+ </ul></div>`}};
+const N=[['overview','Overview'],['transactions','Transactions'],['subscriptions','Subscriptions'],['anomalies','Spending Insights'],['forecasts','Forecasts'],['recs','Savings'],['assistant','AI Assistant'],['how','How it works']];
+async function go(p,a){nav_.innerHTML=N.map(([k,l])=>`<a class="${k==p?'on':''}" onclick="go('${k}')">${l}</a>`).join('');charts.forEach(c=>c.destroy());charts=[];pg.innerHTML='<div class=sk></div>';
+ try{const r=await P[p](a);const[h,after]=Array.isArray(r)?r:[r];pg.innerHTML=h;after&&after()}catch(e){pg.innerHTML=`<div class=card><b class=cr>Could not load</b><p>${e.message}</p></div>`}}
+const nav_=document.getElementById('nav');
+async function act(u,b,m,p){try{await api(u,{method:'PATCH',headers:{'Content-Type':'application/json'},body:JSON.stringify(b)});toast(m)}catch(e){toast(e.message)}}
+const setCat=(i,c)=>act('/transactions/'+i,{category:c},'Category saved');const sub=(i,s)=>act('/subscriptions/'+i,{status:s},'Decision saved').then(()=>go('subscriptions'));
+const an=(i,s)=>act('/anomalies/'+i,{status:s},'Feedback saved');const rec=(i,s)=>act('/recommendations/'+i,{status:s},'Status saved').then(()=>go('recs'));
+async function up(el){const fd=new FormData();fd.append('file',el.files[0]);try{const r=await api('/transactions/upload',{method:'POST',body:fd});us.innerHTML=`<div class=card>Imported ${r.imported} · duplicates skipped ${r.duplicates_skipped} · invalid ${r.invalid} · needs review ${r.needs_review}<br>${JSON.stringify(r.categories)}<br>${r.invalid_rows.map(x=>`row ${x.row}: ${x.reason}`).join('<br>')}</div>`}catch(e){us.innerHTML=`<div class="card cr">${e.message}</div>`}}
+async function ask(){ans.innerHTML='Thinking…';try{const r=await api('/assistant/chat',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({question:aq.value})});ans.innerHTML=`<p><span class=pill>${r.mode}</span> <span class=ch>tool: ${r.tool}</span></p><p>${r.answer}</p><pre>${JSON.stringify(r.evidence,null,1)}</pre>`}catch(e){ans.textContent=e.message}}
+api('/demo/status').then(s=>who.textContent=s.user);go('overview');
+</script></body></html>
